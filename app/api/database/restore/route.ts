@@ -1,56 +1,49 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { writeFile, unlink } from 'fs/promises';
-import path from 'path';
-import os from 'os';
+import pool from '@/lib/db';
 
-const execPromise = promisify(exec);
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-    let tempFilePath = '';
+    const connection = await pool.getConnection();
     try {
         const formData = await request.formData();
         const file = formData.get('file') as File;
 
         if (!file) {
-            return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+            return NextResponse.json({ error: 'No se proporcionó ningún archivo' }, { status: 400 });
         }
 
-        const buffer = Buffer.from(await file.arrayBuffer());
-        tempFilePath = path.join(os.tmpdir(), `restore-${Date.now()}.sql`);
-        await writeFile(tempFilePath, buffer);
+        const sqlContent = await file.text();
 
-        const dbHost = process.env.DB_HOST;
-        const dbUser = process.env.DB_USER;
-        const dbPassword = process.env.DB_PASSWORD;
-        const dbName = process.env.DB_NAME;
+        // Split by semicolons followed by newlines to roughly separate statements
+        // This works for most standard dumps and the one we generate
+        const statements = sqlContent
+            .split(/;\s*\n/)
+            .map(s => s.trim())
+            .filter(s => s.length > 0 && !s.startsWith('--') && !s.startsWith('/*'));
 
-        // Path to mysql.exe - using the Server 5.7 path
-        const mysqlPath = '"C:\\Program Files\\MySQL\\MySQL Server 5.7\\bin\\mysql.exe"';
+        await connection.beginTransaction();
 
-        // Command to restore database
-        const command = `${mysqlPath} -h ${dbHost} -u ${dbUser} -p${dbPassword} ${dbName} < "${tempFilePath}"`;
-
-        const { stderr } = await execPromise(command);
-
-        if (stderr && !stderr.includes('Warning')) {
-            console.error('mysql restore stderr:', stderr);
-            throw new Error(stderr);
+        for (const statement of statements) {
+            // Re-add the semicolon if it was removed by split but is needed for execution
+            // mysql2 doesn't actually need the trailing semicolon for individual queries
+            try {
+                await connection.query(statement);
+            } catch (err: any) {
+                console.error(`Error executing statement: ${statement.substring(0, 50)}...`, err);
+                throw new Error(`Error en la sentencia SQL: ${err.message}`);
+            }
         }
+
+        await connection.commit();
 
         return NextResponse.json({ message: 'Base de datos restaurada correctamente' });
 
     } catch (error: any) {
+        await connection.rollback();
         console.error('Error during restore:', error);
-        return NextResponse.json({ error: error.message || 'Error restoring database' }, { status: 500 });
+        return NextResponse.json({ error: error.message || 'Error al restaurar la base de datos' }, { status: 500 });
     } finally {
-        if (tempFilePath) {
-            try {
-                await unlink(tempFilePath);
-            } catch (err) {
-                console.error('Error deleting temp file:', err);
-            }
-        }
+        connection.release();
     }
 }
