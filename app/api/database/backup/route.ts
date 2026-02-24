@@ -1,35 +1,64 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
+import pool from '@/lib/db';
+import { RowDataPacket } from 'mysql2';
 
-const execPromise = promisify(exec);
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
     try {
-        const dbHost = process.env.DB_HOST;
-        const dbUser = process.env.DB_USER;
-        const dbPassword = process.env.DB_PASSWORD;
-        const dbName = process.env.DB_NAME;
+        const dbName = process.env.DB_NAME || 'service_sales_db';
+        let sqlDump = `-- Database Backup: ${dbName}\n-- Generated at: ${new Date().toISOString()}\n\n`;
+        sqlDump += `SET FOREIGN_KEY_CHECKS=0;\n\n`;
 
-        // Path to mysqldump - using the one found during research
-        const mysqldumpPath = '"C:\\Program Files\\MySQL\\MySQL Server 5.7\\bin\\mysqldump.exe"';
+        // 1. Get all tables
+        const [tables] = await pool.query<RowDataPacket[]>('SHOW TABLES');
+        const tableNames = tables.map(t => Object.values(t)[0] as string);
+
+        for (const tableName of tableNames) {
+            // 2. Get CREATE TABLE statement
+            const [createTableResult] = await pool.query<RowDataPacket[]>(`SHOW CREATE TABLE \`${tableName}\``);
+            const createSql = createTableResult[0]['Create Table'];
+            sqlDump += `-- Structure for table \`${tableName}\`\n`;
+            sqlDump += `DROP TABLE IF EXISTS \`${tableName}\`;\n`;
+            sqlDump += `${createSql};\n\n`;
+
+            // 3. Get data
+            const [rows] = await pool.query<RowDataPacket[]>(`SELECT * FROM \`${tableName}\``);
+            if (rows.length > 0) {
+                sqlDump += `-- Data for table \`${tableName}\`\n`;
+                const columns = Object.keys(rows[0]);
+                const columnList = columns.map(c => `\`${c}\``).join(', ');
+
+                for (const row of rows) {
+                    const values = columns.map(col => {
+                        const val = row[col];
+                        if (val === null) return 'NULL';
+                        if (typeof val === 'string') {
+                            // Escape single quotes correctly for SQL
+                            return `'${val.replace(/'/g, "''")}'`;
+                        }
+                        if (val instanceof Date) {
+                            // Format date for MySQL
+                            return `'${val.toISOString().slice(0, 19).replace('T', ' ')}'`;
+                        }
+                        if (Buffer.isBuffer(val)) {
+                            // Handle potential blob/binary data if any (though unlikely in this schema)
+                            return `X'${val.toString('hex')}'`;
+                        }
+                        return val;
+                    });
+                    sqlDump += `INSERT INTO \`${tableName}\` (${columnList}) VALUES (${values.join(', ')});\n`;
+                }
+                sqlDump += '\n';
+            }
+        }
+
+        sqlDump += `SET FOREIGN_KEY_CHECKS=1;\n`;
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const fileName = `backup-${dbName}-${timestamp}.sql`;
 
-        // Command to execute mysqldump
-        // We use -p${dbPassword} without space as per mysql requirements
-        const command = `${mysqldumpPath} -h ${dbHost} -u ${dbUser} -p${dbPassword} ${dbName}`;
-
-        const { stdout, stderr } = await execPromise(command, { maxBuffer: 1024 * 1024 * 50 }); // 50MB buffer
-
-        if (stderr && !stderr.includes('Warning')) {
-            console.error('mysqldump stderr:', stderr);
-            throw new Error(stderr);
-        }
-
-        return new NextResponse(stdout, {
+        return new NextResponse(sqlDump, {
             status: 200,
             headers: {
                 'Content-Type': 'application/sql',
