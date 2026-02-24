@@ -7,9 +7,10 @@ export function middleware(request: NextRequest) {
         const response = NextResponse.next();
 
         // Set CORS headers
-        response.headers.set('Access-Control-Allow-Origin', '*'); // Or 'http://localhost:4200' for stricter security
-        response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-        response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        response.headers.set('Access-Control-Allow-Origin', '*');
+        response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+        response.headers.set('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+        response.headers.set('Access-Control-Allow-Credentials', 'true');
 
         // Handle preflight requests
         if (request.method === 'OPTIONS') {
