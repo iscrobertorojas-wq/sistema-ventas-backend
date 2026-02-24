@@ -17,7 +17,10 @@ export async function GET() {
         for (const tableName of tableNames) {
             // 2. Get CREATE TABLE statement
             const [createTableResult] = await pool.query<RowDataPacket[]>(`SHOW CREATE TABLE \`${tableName}\``);
-            const createSql = createTableResult[0]['Create Table'];
+            let createSql = createTableResult[0]['Create Table'];
+            // Ensure IF NOT EXISTS is present for extra safety during restore
+            createSql = createSql.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS');
+
             sqlDump += `-- Structure for table \`${tableName}\`\n`;
             sqlDump += `DROP TABLE IF EXISTS \`${tableName}\`;\n`;
             sqlDump += `${createSql};\n\n`;
