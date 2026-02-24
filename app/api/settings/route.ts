@@ -27,6 +27,8 @@ export async function PUT(request: Request) {
         const body = await request.json();
         const { setting_key, setting_value } = body;
 
+        console.log(`Updating setting: ${setting_key} = ${setting_value}`);
+
         if (!setting_key || setting_value === undefined) {
             return NextResponse.json(
                 { error: 'setting_key and setting_value are required' },
@@ -34,11 +36,14 @@ export async function PUT(request: Request) {
             );
         }
 
+        const trimmedValue = String(setting_value).trim();
+
         await pool.query(
             'INSERT INTO Settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
-            [setting_key, setting_value, setting_value]
+            [setting_key, trimmedValue, trimmedValue]
         );
 
+        console.log(`Setting ${setting_key} updated successfully to: ${trimmedValue}`);
         return NextResponse.json({ message: 'Setting updated successfully' });
     } catch (error: any) {
         console.error('Error updating setting:', error);

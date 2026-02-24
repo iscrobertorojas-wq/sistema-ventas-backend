@@ -7,13 +7,19 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const startDate = searchParams.get('startDate');
         const endDate = searchParams.get('endDate');
+        const clientId = searchParams.get('clientId');
 
-        let dateFilter = '';
+        let filters = 'WHERE 1=1';
         const params: any[] = [];
 
         if (startDate && endDate) {
-            dateFilter = 'AND s.date BETWEEN ? AND ?';
+            filters += ' AND s.date BETWEEN ? AND ?';
             params.push(startDate, endDate);
+        }
+
+        if (clientId) {
+            filters += ' AND s.client_id = ?';
+            params.push(clientId);
         }
 
         const query = `
@@ -39,7 +45,7 @@ export async function GET(request: Request) {
         (SELECT GROUP_CONCAT(DISTINCT bank_account SEPARATOR ', ') FROM Payments WHERE sale_id = s.id) as bank_accounts
       FROM Sales s
       JOIN Clients c ON s.client_id = c.id
-      WHERE 1=1 ${dateFilter}
+      ${filters}
       ORDER BY s.date DESC
     `;
 
@@ -102,8 +108,8 @@ export async function POST(request: Request) {
         // Update folio counter
         const nextFolio = currentFolio + 1;
         await connection.query(
-            'UPDATE Settings SET setting_value = ? WHERE setting_key = ?',
-            [nextFolio.toString(), settingKey]
+            'INSERT INTO Settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
+            [settingKey, nextFolio.toString(), nextFolio.toString()]
         );
 
         await connection.commit();
