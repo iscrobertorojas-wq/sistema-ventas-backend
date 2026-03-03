@@ -9,7 +9,7 @@ export async function GET(request: Request) {
         const endDate = searchParams.get('endDate');
 
         let query = `
-      SELECT p.*, s.client_id, c.name as client_name, s.folio as sale_folio, s.type as sale_type
+      SELECT p.*, s.client_id, c.name as client_name, s.folio as sale_folio, s.type as sale_type, s.date as sale_date
       FROM Payments p 
       JOIN Sales s ON p.sale_id = s.id 
       JOIN Clients c ON s.client_id = c.id 
