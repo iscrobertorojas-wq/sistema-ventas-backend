@@ -2,16 +2,28 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
-        const query = `
-      SELECT p.*, s.client_id, c.name as client_name 
+        const { searchParams } = new URL(request.url);
+        const startDate = searchParams.get('startDate');
+        const endDate = searchParams.get('endDate');
+
+        let query = `
+      SELECT p.*, s.client_id, c.name as client_name, s.folio as sale_folio, s.type as sale_type
       FROM Payments p 
       JOIN Sales s ON p.sale_id = s.id 
       JOIN Clients c ON s.client_id = c.id 
-      ORDER BY p.date DESC
     `;
-        const [rows] = await pool.query<RowDataPacket[]>(query);
+        const queryParams: any[] = [];
+
+        if (startDate && endDate) {
+            query += ` WHERE p.date >= ? AND p.date <= ? `;
+            queryParams.push(startDate, endDate);
+        }
+
+        query += ` ORDER BY p.date DESC `;
+
+        const [rows] = await pool.query<RowDataPacket[]>(query, queryParams);
         return NextResponse.json(rows);
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
