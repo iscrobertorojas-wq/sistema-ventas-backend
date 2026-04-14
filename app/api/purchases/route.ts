@@ -18,7 +18,12 @@ export async function GET(request: Request) {
                 p.date,
                 p.total,
                 p.notes,
-                p.created_at
+                p.created_at,
+                (
+                    SELECT GROUP_CONCAT(description SEPARATOR ', ')
+                    FROM PurchaseItems
+                    WHERE purchase_id = p.id
+                ) as items_description
             FROM Purchases p
             JOIN Suppliers s ON p.supplier_id = s.id
         `;
