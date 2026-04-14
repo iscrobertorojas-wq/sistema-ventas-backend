@@ -97,3 +97,46 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
+
+export async function PUT(request: Request) {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const body = await request.json();
+        const { id, supplier_id, date, notes, items } = body;
+
+        if (!id || !supplier_id || !items || items.length === 0) {
+            return NextResponse.json({ error: 'ID, proveedor e ítems son requeridos' }, { status: 400 });
+        }
+
+        // Calculate new total
+        const total = items.reduce((sum: number, item: any) => sum + parseFloat(item.cost), 0);
+        const purchaseDate = date || new Date().toISOString().split('T')[0];
+
+        // Update Purchase
+        await connection.query(
+            'UPDATE Purchases SET supplier_id = ?, date = ?, total = ?, notes = ? WHERE id = ?',
+            [supplier_id, purchaseDate, total, notes || null, id]
+        );
+
+        // Update Items (Delete and Re-insert)
+        await connection.query('DELETE FROM PurchaseItems WHERE purchase_id = ?', [id]);
+        for (const item of items) {
+            await connection.query(
+                'INSERT INTO PurchaseItems (purchase_id, description, cost) VALUES (?, ?, ?)',
+                [id, item.description.trim(), parseFloat(item.cost)]
+            );
+        }
+
+        await connection.commit();
+        return NextResponse.json({ message: 'Compra actualizada correctamente' });
+    } catch (error: any) {
+        await connection.rollback();
+        console.error('Error updating purchase:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    } finally {
+        connection.release();
+    }
+}
+
