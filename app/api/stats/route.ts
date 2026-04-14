@@ -29,8 +29,8 @@ export async function GET() {
             [salesByMonth],
             [topClients],
             [statusDistribution],
-            [topServices],
-            [monthPurchases]
+            [monthPurchases],
+            [purchasesByMonth]
         ] = await Promise.all([
             pool.query<RowDataPacket[]>('SELECT COUNT(*) as count, COALESCE(SUM(total), 0) as total FROM Sales WHERE date >= ?', [weekStr]),
             pool.query<RowDataPacket[]>('SELECT COUNT(*) as count, COALESCE(SUM(total), 0) as total FROM Sales WHERE date >= ?', [dateStr]),
@@ -60,15 +60,14 @@ export async function GET() {
             pool.query<RowDataPacket[]>(`
                 SELECT status, COUNT(*) as count FROM Sales GROUP BY status
             `),
+            pool.query<RowDataPacket[]>('SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as count FROM Purchases WHERE date >= ? AND date <= LAST_DAY(?)', [dateStr, dateStr]),
             pool.query<RowDataPacket[]>(`
-                SELECT srv.description, COUNT(si.id) as count, COALESCE(SUM(si.price), 0) as total
-                FROM Services srv
-                JOIN SaleItems si ON srv.id = si.service_id
-                GROUP BY srv.id, srv.description
-                ORDER BY count DESC
-                LIMIT 5
-            `),
-            pool.query<RowDataPacket[]>('SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as count FROM Purchases WHERE date >= ? AND date <= LAST_DAY(?)', [dateStr, dateStr])
+                SELECT DATE_FORMAT(date, '%Y-%m') as month, COALESCE(SUM(total), 0) as total
+                FROM Purchases
+                WHERE date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+                GROUP BY month
+                ORDER BY month ASC
+            `)
         ]);
 
         return NextResponse.json({
@@ -81,7 +80,7 @@ export async function GET() {
             salesByMonth,
             topClients,
             statusDistribution,
-            topServices
+            purchasesByMonth
         });
     } catch (error: any) {
         console.error('Error fetching stats:', error);
