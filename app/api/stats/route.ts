@@ -29,7 +29,8 @@ export async function GET() {
             [salesByMonth],
             [topClients],
             [statusDistribution],
-            [topServices]
+            [topServices],
+            [monthPurchases]
         ] = await Promise.all([
             pool.query<RowDataPacket[]>('SELECT COUNT(*) as count, COALESCE(SUM(total), 0) as total FROM Sales WHERE date >= ?', [weekStr]),
             pool.query<RowDataPacket[]>('SELECT COUNT(*) as count, COALESCE(SUM(total), 0) as total FROM Sales WHERE date >= ?', [dateStr]),
@@ -66,7 +67,8 @@ export async function GET() {
                 GROUP BY srv.id, srv.description
                 ORDER BY count DESC
                 LIMIT 5
-            `)
+            `),
+            pool.query<RowDataPacket[]>('SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as count FROM Purchases WHERE date >= ? AND date <= LAST_DAY(?)', [dateStr, dateStr])
         ]);
 
         return NextResponse.json({
@@ -75,6 +77,7 @@ export async function GET() {
             year: yearStats[0],
             pending: pendingStats[0],
             monthlyIncome: monthlyIncome[0],
+            monthPurchases: monthPurchases[0],
             salesByMonth,
             topClients,
             statusDistribution,
