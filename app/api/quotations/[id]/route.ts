@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const { id } = params;
+        const { id } = await params;
 
         const [quotations] = await pool.query<RowDataPacket[]>(
             `SELECT q.*, c.name as client_name, c.phone as client_phone, c.address as client_address
