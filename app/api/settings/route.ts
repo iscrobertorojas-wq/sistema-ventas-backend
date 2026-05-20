@@ -5,7 +5,7 @@ import { withAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = withAuth(async function GET() {
+export const GET = async function GET() {
     try {
         const [rows] = await pool.query<RowDataPacket[]>(
             'SELECT setting_key, setting_value FROM Settings'
@@ -21,7 +21,7 @@ export const GET = withAuth(async function GET() {
         console.error('Error fetching settings:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-});
+};
 
 export const PUT = withAuth(async function PUT(request) {
     try {
