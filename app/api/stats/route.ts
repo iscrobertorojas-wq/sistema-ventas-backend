@@ -31,7 +31,8 @@ export const GET = withAuth(async function GET() {
             [topClients],
             [statusDistribution],
             [monthPurchases],
-            [purchasesByMonth]
+            [purchasesByMonth],
+            [paymentsByMonth]
         ] = await Promise.all([
             pool.query<RowDataPacket[]>('SELECT COUNT(*) as count, COALESCE(SUM(total), 0) as total FROM Sales WHERE date >= ?', [weekStr]),
             pool.query<RowDataPacket[]>('SELECT COUNT(*) as count, COALESCE(SUM(total), 0) as total FROM Sales WHERE date >= ?', [dateStr]),
@@ -68,6 +69,13 @@ export const GET = withAuth(async function GET() {
                 WHERE date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
                 GROUP BY month
                 ORDER BY month ASC
+            `),
+            pool.query<RowDataPacket[]>(`
+                SELECT DATE_FORMAT(date, '%Y-%m') as month, COALESCE(SUM(amount), 0) as total
+                FROM Payments
+                WHERE date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+                GROUP BY month
+                ORDER BY month ASC
             `)
         ]);
 
@@ -81,7 +89,8 @@ export const GET = withAuth(async function GET() {
             salesByMonth,
             topClients,
             statusDistribution,
-            purchasesByMonth
+            purchasesByMonth,
+            paymentsByMonth
         });
     } catch (error: any) {
         console.error('Error fetching stats:', error);
