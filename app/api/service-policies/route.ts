@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { withAuth } from '@/lib/auth';
 
-export async function GET() {
+export const GET = withAuth(async function GET() {
     try {
         const query = `
             SELECT
@@ -25,9 +26,9 @@ export async function GET() {
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withAuth(async function POST(request) {
     try {
         const body = await request.json();
         const { client_id, policy_number, date, total_hours } = body;
@@ -54,9 +55,9 @@ export async function POST(request: Request) {
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-}
+});
 
-export async function PUT(request: Request) {
+export const PUT = withAuth(async function PUT(request) {
     try {
         const body = await request.json();
         const { id, client_id, policy_number, date, total_hours } = body;
@@ -83,9 +84,9 @@ export async function PUT(request: Request) {
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-}
+});
 
-export async function DELETE(request: Request) {
+export const DELETE = withAuth(async function DELETE(request) {
     try {
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
@@ -99,4 +100,4 @@ export async function DELETE(request: Request) {
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-}
+});

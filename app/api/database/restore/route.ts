@@ -1,10 +1,25 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import mysql from 'mysql2/promise';
+import { withAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: Request) {
-    const connection = await pool.getConnection();
+export const POST = withAuth(async function POST(request: Request) {
+    // Create a temporary connection with multipleStatements enabled just for this restore
+    const connection = await mysql.createConnection({
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '3306'),
+        user: process.env.DB_USER || 'root',
+        password: process.env.DB_PASSWORD || 'admin',
+        database: process.env.DB_NAME || 'service_sales_db',
+        multipleStatements: true,
+        ssl: process.env.DB_HOST && process.env.DB_HOST !== 'localhost' ? {
+            minVersion: 'TLSv1.2',
+            rejectUnauthorized: true
+        } : undefined
+    });
+
     try {
         const formData = await request.formData();
         const file = formData.get('file') as File;
@@ -25,7 +40,6 @@ export async function POST(request: Request) {
         await connection.beginTransaction();
 
         try {
-            // With multipleStatements: true, we can execute the entire script at once
             await connection.query(finalSql);
             await connection.commit();
         } catch (err: any) {
@@ -42,6 +56,6 @@ export async function POST(request: Request) {
             details: 'Asegúrate de que el archivo sea un respaldo válido generado por el sistema.'
         }, { status: 500 });
     } finally {
-        connection.release();
+        await connection.end();
     }
-}
+});

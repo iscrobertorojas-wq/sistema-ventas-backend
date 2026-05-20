@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withAuth(async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params;
 
@@ -31,9 +32,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         console.error('Error fetching quotation:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-}
+});
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const DELETE = withAuth(async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
     const connection = await pool.getConnection();
     try {
         const { id } = await params;
@@ -61,4 +62,4 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     } finally {
         connection.release();
     }
-}
+});

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { withAuth } from '@/lib/auth';
 
-export async function GET() {
+export const GET = withAuth(async function GET() {
     try {
         const connection = await pool.getConnection();
 
@@ -91,4 +92,4 @@ export async function GET() {
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-}
+});

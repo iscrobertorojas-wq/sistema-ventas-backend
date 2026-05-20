@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
+import { withAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export const GET = withAuth(async function GET() {
     try {
         const dbName = process.env.DB_NAME || 'service_sales_db';
         let sqlDump = `-- Database Backup: ${dbName}\n-- Generated at: ${new Date().toISOString()}\n\n`;
@@ -73,4 +74,4 @@ export async function GET() {
         console.error('Error during backup:', error);
         return NextResponse.json({ error: error.message || 'Error generating backup' }, { status: 500 });
     }
-}
+});

@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
+import { withAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: Request) {
+export const GET = withAuth(async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const startDate = searchParams.get('startDate');
@@ -30,4 +31,4 @@ export async function GET(request: Request) {
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-}
+});

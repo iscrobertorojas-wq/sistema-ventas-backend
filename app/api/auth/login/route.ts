@@ -4,10 +4,17 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { RowDataPacket } from 'mysql2';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key-change-this-in-env';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 export async function POST(request: Request) {
     try {
+        if (!JWT_SECRET) {
+            console.error('[CRITICAL] JWT_SECRET environment variable is not defined!');
+            return NextResponse.json(
+                { error: 'Internal Server Error: Security misconfiguration.' },
+                { status: 500 }
+            );
+        }
         const body = await request.json();
         const { email, password } = body;
 

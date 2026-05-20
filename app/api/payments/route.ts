@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(request: Request) {
+export const GET = withAuth(async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const startDate = searchParams.get('startDate');
@@ -28,9 +29,9 @@ export async function GET(request: Request) {
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withAuth(async function POST(request: Request) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -89,9 +90,9 @@ export async function POST(request: Request) {
     } finally {
         connection.release();
     }
-}
+});
 
-export async function DELETE(request: Request) {
+export const DELETE = withAuth(async function DELETE(request: Request) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -148,9 +149,9 @@ export async function DELETE(request: Request) {
     } finally {
         connection.release();
     }
-}
+});
 
-export async function PUT(request: Request) {
+export const PUT = withAuth(async function PUT(request: Request) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -225,4 +226,4 @@ export async function PUT(request: Request) {
     } finally {
         connection.release();
     }
-}
+});

@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
+import { withAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(
+export const GET = withAuth(async function GET(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -41,4 +42,4 @@ export async function GET(
             { status: 500 }
         );
     }
-}
+});

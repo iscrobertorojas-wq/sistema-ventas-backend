@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
+import { withAuth } from '@/lib/auth';
 
-export async function GET(
-    request: Request,
+export const GET = withAuth(async function GET(
+    request,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
@@ -43,4 +44,4 @@ export async function GET(
             { status: 500 }
         );
     }
-}
+});
