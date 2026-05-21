@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { withAuth } from '@/lib/auth';
 
-export const GET = withAuth(async function GET() {
+export const GET = async function GET() {
     try {
         const connection = await pool.getConnection();
 
@@ -87,9 +86,38 @@ export const GET = withAuth(async function GET() {
             VALUES ('folio_quotation', '1')
         `);
 
+        // Create ContpaqiProducts table
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS ContpaqiProducts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                description VARCHAR(255) NOT NULL,
+                price DECIMAL(10, 2) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Create ContpaqiLicenses table
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS ContpaqiLicenses (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                serial_number VARCHAR(100) NOT NULL UNIQUE,
+                client_id INT NOT NULL,
+                product_id INT NOT NULL,
+                users_count INT NOT NULL DEFAULT 1,
+                expiration_date DATE NOT NULL,
+                contact_name VARCHAR(255) NOT NULL,
+                contact_phone VARCHAR(50) NOT NULL,
+                is_renewed_current_year TINYINT(1) DEFAULT 0,
+                renewal_date DATE DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (client_id) REFERENCES Clients(id),
+                FOREIGN KEY (product_id) REFERENCES ContpaqiProducts(id) ON DELETE CASCADE
+            )
+        `);
+
         connection.release();
-        return NextResponse.json({ message: 'Migration successful: Suppliers, Purchases, PurchaseItems, Quotations and QuotationItems tables created' });
+        return NextResponse.json({ message: 'Migration successful: Contpaqi and other tables created' });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-});
+};
