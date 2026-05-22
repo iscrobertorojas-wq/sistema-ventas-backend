@@ -11,8 +11,9 @@ export const GET = withAuth(async function GET() {
                 c.name AS client_name,
                 p.description AS product_description,
                 p.price AS product_price,
+                (YEAR(l.renewal_date) = YEAR(CURRENT_DATE())) AS is_renewed_this_year,
                 CASE 
-                    WHEN l.is_renewed_current_year = 1 THEN 'Renovado'
+                    WHEN YEAR(l.renewal_date) = YEAR(CURRENT_DATE()) THEN 'Renovado'
                     WHEN l.expiration_date < CURRENT_DATE() THEN 'Vencido'
                     ELSE 'Vigente'
                 END AS status
@@ -133,9 +134,18 @@ export const PUT = withAuth(async function PUT(request) {
 
         // Case 1: Toggle renewal only (quick action from list)
         if (toggleRenewal) {
-            const nextRenewed = currentLicense.is_renewed_current_year === 1 ? 0 : 1;
-            const renewalDate = nextRenewed === 1 ? (body.renewalDate ? new Date(body.renewalDate) : new Date()) : null;
-            
+            // Determine if already renewed THIS year based on renewal_date year, not the static flag
+            const currentYear = new Date().getFullYear();
+            const renewalYear = currentLicense.renewal_date
+                ? new Date(currentLicense.renewal_date).getFullYear()
+                : null;
+            const isRenewedThisYear = renewalYear === currentYear;
+
+            const nextRenewed = isRenewedThisYear ? 0 : 1;
+            const renewalDate = nextRenewed === 1
+                ? (body.renewalDate ? new Date(body.renewalDate) : new Date())
+                : null;
+
             // Adjust expiration date: add or subtract 1 year
             const currentExpDate = new Date(currentLicense.expiration_date);
             if (nextRenewed === 1) {
@@ -152,8 +162,9 @@ export const PUT = withAuth(async function PUT(request) {
             );
 
             return NextResponse.json({
-                message: 'Renovación actualizada con éxito',
+                message: nextRenewed === 1 ? 'Licencia renovada con éxito' : 'Renovación desmarcada',
                 is_renewed_current_year: nextRenewed,
+                is_renewed_this_year: nextRenewed === 1,
                 renewal_date: renewalDate,
                 expiration_date: currentExpDate
             });
