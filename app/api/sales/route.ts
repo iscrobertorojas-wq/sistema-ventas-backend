@@ -176,3 +176,55 @@ export const PUT = withAuth(async function PUT(request: Request) {
         connection.release();
     }
 });
+
+export const DELETE = withAuth(async function DELETE(request: Request) {
+    const connection = await pool.getConnection();
+    try {
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get('id');
+
+        if (!id) {
+            return NextResponse.json({ error: 'ID de venta requerido' }, { status: 400 });
+        }
+
+        await connection.beginTransaction();
+
+        // Verify sale exists
+        const [sales] = await connection.query<RowDataPacket[]>(
+            'SELECT id FROM Sales WHERE id = ?',
+            [id]
+        );
+        if (sales.length === 0) {
+            await connection.rollback();
+            return NextResponse.json({ error: 'Venta no encontrada' }, { status: 404 });
+        }
+
+        // Check for associated payments
+        const [payments] = await connection.query<RowDataPacket[]>(
+            'SELECT COUNT(*) as count FROM Payments WHERE sale_id = ?',
+            [id]
+        );
+        if (payments[0].count > 0) {
+            await connection.rollback();
+            return NextResponse.json(
+                { error: 'No se puede eliminar una venta que tiene pagos asociados.' },
+                { status: 400 }
+            );
+        }
+
+        // Delete sale items first
+        await connection.query('DELETE FROM SaleItems WHERE sale_id = ?', [id]);
+
+        // Delete sale
+        await connection.query('DELETE FROM Sales WHERE id = ?', [id]);
+
+        await connection.commit();
+        return NextResponse.json({ message: 'Venta eliminada correctamente' });
+    } catch (error: any) {
+        await connection.rollback();
+        console.error('Error deleting sale:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    } finally {
+        connection.release();
+    }
+});

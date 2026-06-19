@@ -146,3 +146,42 @@ export const PUT = withAuth(async function PUT(request: Request) {
     }
 });
 
+export const DELETE = withAuth(async function DELETE(request: Request) {
+    const connection = await pool.getConnection();
+    try {
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get('id');
+
+        if (!id) {
+            return NextResponse.json({ error: 'ID de compra requerido' }, { status: 400 });
+        }
+
+        await connection.beginTransaction();
+
+        // Verify purchase exists
+        const [purchases] = await connection.query<RowDataPacket[]>(
+            'SELECT id FROM Purchases WHERE id = ?',
+            [id]
+        );
+        if (purchases.length === 0) {
+            await connection.rollback();
+            return NextResponse.json({ error: 'Compra no encontrada' }, { status: 404 });
+        }
+
+        // Delete purchase items first
+        await connection.query('DELETE FROM PurchaseItems WHERE purchase_id = ?', [id]);
+
+        // Delete purchase
+        await connection.query('DELETE FROM Purchases WHERE id = ?', [id]);
+
+        await connection.commit();
+        return NextResponse.json({ message: 'Compra eliminada correctamente' });
+    } catch (error: any) {
+        await connection.rollback();
+        console.error('Error deleting purchase:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    } finally {
+        connection.release();
+    }
+});
+
