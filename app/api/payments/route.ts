@@ -48,15 +48,16 @@ export const POST = withAuth(async function POST(request: Request) {
             'SELECT total FROM Sales WHERE id = ?',
             [sale_id]
         );
-        const saleTotal = saleRows[0]?.total || 0;
+        const saleTotal = parseFloat(saleRows[0]?.total || 0);
 
         const [paymentRows] = await connection.query<RowDataPacket[]>(
             'SELECT SUM(amount) as paid FROM Payments WHERE sale_id = ?',
             [sale_id]
         );
-        const totalPaid = paymentRows[0]?.paid || 0;
+        const totalPaid = parseFloat(paymentRows[0]?.paid || 0);
+        const amountNum = parseFloat(amount);
 
-        if (totalPaid + amount > saleTotal + 0.01) { // Small tolerance for float
+        if (totalPaid + amountNum > saleTotal + 0.01) { // Small tolerance for float
             connection.release(); // Important to release here
             return NextResponse.json({ error: 'Payment amount exceeds remaining balance' }, { status: 400 });
         }
@@ -179,13 +180,13 @@ export const PUT = withAuth(async function PUT(request: Request) {
             'SELECT total FROM Sales WHERE id = ?',
             [sale_id]
         );
-        const saleTotal = saleRows[0]?.total || 0;
+        const saleTotal = parseFloat(saleRows[0]?.total || 0);
 
         const [totalPaidRows] = await connection.query<RowDataPacket[]>(
             'SELECT SUM(amount) as paid FROM Payments WHERE sale_id = ?',
             [sale_id]
         );
-        let totalPaid = totalPaidRows[0]?.paid || 0;
+        let totalPaid = parseFloat(totalPaidRows[0]?.paid || 0);
 
         // We need to subtract the old amount of THIS payment from totalPaid to get the base
         // But since we are doing a check before update, we can't easily get the 'old' amount without another query or math.
@@ -194,9 +195,10 @@ export const PUT = withAuth(async function PUT(request: Request) {
             'SELECT SUM(amount) as paid FROM Payments WHERE sale_id = ? AND id != ?',
             [sale_id, id]
         );
-        const otherPaid = otherPayments[0]?.paid || 0;
+        const otherPaid = parseFloat(otherPayments[0]?.paid || 0);
+        const amountNum = parseFloat(amount);
 
-        if (otherPaid + Number(amount) > saleTotal + 0.01) { // 0.01 tolerance
+        if (otherPaid + amountNum > saleTotal + 0.01) { // 0.01 tolerance
             return NextResponse.json({ error: 'Payment amount exceeds remaining balance' }, { status: 400 });
         }
 
