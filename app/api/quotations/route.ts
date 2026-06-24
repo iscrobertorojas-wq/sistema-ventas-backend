@@ -11,6 +11,7 @@ export const GET = withAuth(async function GET(request: Request) {
                 q.folio,
                 q.date,
                 q.iva_mode,
+                q.currency,
                 q.subtotal,
                 q.iva,
                 q.total,
@@ -42,7 +43,7 @@ export const POST = withAuth(async function POST(request: Request) {
         await connection.beginTransaction();
 
         const body = await request.json();
-        const { client_id, items, date, iva_mode, observations } = body;
+        const { client_id, items, date, iva_mode, currency, observations } = body;
 
         if (!client_id || !items || items.length === 0) {
             return NextResponse.json({ error: 'Client and items are required' }, { status: 400 });
@@ -84,8 +85,8 @@ export const POST = withAuth(async function POST(request: Request) {
 
         // Insert Quotation
         const [result] = await connection.query<ResultSetHeader>(
-            'INSERT INTO Quotations (folio, client_id, date, iva_mode, subtotal, iva, total, observations) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [folio, client_id, quotationDate, iva_mode || 'none', subtotal, iva, total, observations || null]
+            'INSERT INTO Quotations (folio, client_id, date, iva_mode, currency, subtotal, iva, total, observations) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [folio, client_id, quotationDate, iva_mode || 'none', currency || 'MXN', subtotal, iva, total, observations || null]
         );
         const quotationId = result.insertId;
 
@@ -122,7 +123,7 @@ export const PUT = withAuth(async function PUT(request: Request) {
         await connection.beginTransaction();
 
         const body = await request.json();
-        const { id, client_id, items, date, iva_mode, observations } = body;
+        const { id, client_id, items, date, iva_mode, currency, observations } = body;
 
         if (!id || !client_id || !items || items.length === 0) {
             return NextResponse.json({ error: 'ID, Client and items are required' }, { status: 400 });
@@ -149,8 +150,8 @@ export const PUT = withAuth(async function PUT(request: Request) {
 
         // Update Quotation
         await connection.query(
-            'UPDATE Quotations SET client_id = ?, date = ?, iva_mode = ?, subtotal = ?, iva = ?, total = ?, observations = ? WHERE id = ?',
-            [client_id, quotationDate, iva_mode || 'none', subtotal, iva, total, observations || null, id]
+            'UPDATE Quotations SET client_id = ?, date = ?, iva_mode = ?, currency = ?, subtotal = ?, iva = ?, total = ?, observations = ? WHERE id = ?',
+            [client_id, quotationDate, iva_mode || 'none', currency || 'MXN', subtotal, iva, total, observations || null, id]
         );
 
         // Delete and re-insert items

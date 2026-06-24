@@ -12,6 +12,13 @@ export const GET = async function GET() {
             console.log('Column observations might already exist');
         }
 
+        // Add currency column to Quotations
+        try {
+            await connection.query("ALTER TABLE Quotations ADD COLUMN currency VARCHAR(10) DEFAULT 'MXN' AFTER iva_mode;");
+        } catch (e) {
+            console.log('Column currency might already exist');
+        }
+
         // Create Suppliers table
         await connection.query(`
             CREATE TABLE IF NOT EXISTS Suppliers (
