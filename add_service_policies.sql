@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS PolicyServiceRecords (
     end_time TIME NOT NULL,
     duration_minutes INT NOT NULL,
     service_type ENUM('Remoto','Presencial') NOT NULL,
+    requested_by VARCHAR(255) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (policy_id) REFERENCES ServicePolicies(id) ON DELETE CASCADE
 );

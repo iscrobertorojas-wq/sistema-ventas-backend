@@ -26,7 +26,7 @@ export const GET = withAuth(async function GET(request: Request) {
 export const POST = withAuth(async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { policy_id, service_date, description, start_time, end_time, duration_minutes, service_type } = body;
+        const { policy_id, service_date, description, start_time, end_time, duration_minutes, service_type, requested_by } = body;
 
         if (!policy_id || !service_date || !description || !start_time || !end_time || duration_minutes === undefined || !service_type) {
             return NextResponse.json({ error: 'Todos los campos son requeridos' }, { status: 400 });
@@ -52,9 +52,9 @@ export const POST = withAuth(async function POST(request: Request) {
         }
 
         const [result] = await pool.query<ResultSetHeader>(
-            `INSERT INTO PolicyServiceRecords (policy_id, service_date, description, start_time, end_time, duration_minutes, service_type)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [policy_id, service_date, description, start_time, end_time, duration_minutes, service_type]
+            `INSERT INTO PolicyServiceRecords (policy_id, service_date, description, start_time, end_time, duration_minutes, service_type, requested_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [policy_id, service_date, description, start_time, end_time, duration_minutes, service_type, requested_by || null]
         );
 
         return NextResponse.json({ id: result.insertId, message: 'Registro creado correctamente' }, { status: 201 });
@@ -66,16 +66,16 @@ export const POST = withAuth(async function POST(request: Request) {
 export const PUT = withAuth(async function PUT(request: Request) {
     try {
         const body = await request.json();
-        const { id, service_date, description, start_time, end_time, duration_minutes, service_type } = body;
+        const { id, service_date, description, start_time, end_time, duration_minutes, service_type, requested_by } = body;
 
         if (!id || !service_date || !description || !start_time || !end_time || duration_minutes === undefined || !service_type) {
             return NextResponse.json({ error: 'Todos los campos son requeridos' }, { status: 400 });
         }
 
         await pool.query(
-            `UPDATE PolicyServiceRecords SET service_date = ?, description = ?, start_time = ?, end_time = ?, duration_minutes = ?, service_type = ?
+            `UPDATE PolicyServiceRecords SET service_date = ?, description = ?, start_time = ?, end_time = ?, duration_minutes = ?, service_type = ?, requested_by = ?
              WHERE id = ?`,
-            [service_date, description, start_time, end_time, duration_minutes, service_type, id]
+            [service_date, description, start_time, end_time, duration_minutes, service_type, requested_by || null, id]
         );
 
         return NextResponse.json({ message: 'Registro actualizado correctamente' });
