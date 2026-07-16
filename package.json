@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
-    "build": "next build",
+    "build": "node scripts/migrate.js && next build",
     "start": "next start",
     "lint": "eslint"
   },
