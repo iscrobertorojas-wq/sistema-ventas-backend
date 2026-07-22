@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS ServicePolicies (
     id INT AUTO_INCREMENT PRIMARY KEY,
     client_id INT NOT NULL,
     policy_number VARCHAR(100) NOT NULL UNIQUE,
+    invoice_number VARCHAR(100) NULL,
     date DATE NOT NULL,
     total_hours DECIMAL(6,2) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

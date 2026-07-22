@@ -3,12 +3,27 @@ import pool from '@/lib/db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { withAuth } from '@/lib/auth';
 
+let migrationChecked = false;
+async function ensureInvoiceNumberColumn() {
+    if (migrationChecked) return;
+    try {
+        await pool.query("ALTER TABLE ServicePolicies ADD COLUMN invoice_number VARCHAR(100) NULL");
+    } catch (e: any) {
+        if (e.code !== 'ER_DUP_FIELDNAME') {
+            console.error("Migration error for ServicePolicies invoice_number:", e);
+        }
+    }
+    migrationChecked = true;
+}
+
 export const GET = withAuth(async function GET() {
     try {
+        await ensureInvoiceNumberColumn();
         const query = `
             SELECT
                 sp.id,
                 sp.policy_number,
+                sp.invoice_number,
                 sp.date,
                 sp.total_hours,
                 sp.client_id,
@@ -18,7 +33,7 @@ export const GET = withAuth(async function GET() {
             FROM ServicePolicies sp
             JOIN Clients c ON sp.client_id = c.id
             LEFT JOIN PolicyServiceRecords psr ON psr.policy_id = sp.id
-            GROUP BY sp.id, sp.policy_number, sp.date, sp.total_hours, sp.client_id, c.name
+            GROUP BY sp.id, sp.policy_number, sp.invoice_number, sp.date, sp.total_hours, sp.client_id, c.name
             ORDER BY sp.date DESC
         `;
         const [rows] = await pool.query<RowDataPacket[]>(query);
@@ -30,12 +45,15 @@ export const GET = withAuth(async function GET() {
 
 export const POST = withAuth(async function POST(request) {
     try {
+        await ensureInvoiceNumberColumn();
         const body = await request.json();
-        const { client_id, policy_number, date, total_hours } = body;
+        const { client_id, policy_number, invoice_number, date, total_hours } = body;
 
         if (!client_id || !policy_number || !date || !total_hours) {
             return NextResponse.json({ error: 'Todos los campos son requeridos' }, { status: 400 });
         }
+
+        const invoiceVal = invoice_number && String(invoice_number).trim() !== '' ? String(invoice_number).trim() : null;
 
         // Check duplicate policy_number FOR THE SAME CLIENT
         const [existing] = await pool.query<RowDataPacket[]>(
@@ -47,8 +65,8 @@ export const POST = withAuth(async function POST(request) {
         }
 
         const [result] = await pool.query<ResultSetHeader>(
-            'INSERT INTO ServicePolicies (client_id, policy_number, date, total_hours) VALUES (?, ?, ?, ?)',
-            [client_id, policy_number, date, total_hours]
+            'INSERT INTO ServicePolicies (client_id, policy_number, invoice_number, date, total_hours) VALUES (?, ?, ?, ?, ?)',
+            [client_id, policy_number, invoiceVal, date, total_hours]
         );
 
         return NextResponse.json({ id: result.insertId, message: 'Póliza creada correctamente' }, { status: 201 });
@@ -59,12 +77,15 @@ export const POST = withAuth(async function POST(request) {
 
 export const PUT = withAuth(async function PUT(request) {
     try {
+        await ensureInvoiceNumberColumn();
         const body = await request.json();
-        const { id, client_id, policy_number, date, total_hours } = body;
+        const { id, client_id, policy_number, invoice_number, date, total_hours } = body;
 
         if (!id || !client_id || !policy_number || !date || !total_hours) {
             return NextResponse.json({ error: 'Todos los campos son requeridos' }, { status: 400 });
         }
+
+        const invoiceVal = invoice_number && String(invoice_number).trim() !== '' ? String(invoice_number).trim() : null;
 
         // Check duplicate policy_number FOR THE SAME CLIENT (excluding current policy)
         const [existing] = await pool.query<RowDataPacket[]>(
@@ -76,8 +97,8 @@ export const PUT = withAuth(async function PUT(request) {
         }
 
         await pool.query(
-            'UPDATE ServicePolicies SET client_id = ?, policy_number = ?, date = ?, total_hours = ? WHERE id = ?',
-            [client_id, policy_number, date, total_hours, id]
+            'UPDATE ServicePolicies SET client_id = ?, policy_number = ?, invoice_number = ?, date = ?, total_hours = ? WHERE id = ?',
+            [client_id, policy_number, invoiceVal, date, total_hours, id]
         );
 
         return NextResponse.json({ message: 'Póliza actualizada correctamente' });
