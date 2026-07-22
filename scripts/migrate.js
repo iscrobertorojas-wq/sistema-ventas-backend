@@ -30,9 +30,14 @@ async function runMigrations() {
     try {
         connection = await mysql.createConnection({
             host: process.env.DB_HOST,
+            port: parseInt(process.env.DB_PORT || '3306'),
             user: process.env.DB_USER,
             password: process.env.DB_PASSWORD,
             database: process.env.DB_NAME,
+            ssl: process.env.DB_HOST && process.env.DB_HOST !== 'localhost' && process.env.DB_HOST !== '127.0.0.1' ? {
+                minVersion: 'TLSv1.2',
+                rejectUnauthorized: true
+            } : undefined,
         });
 
         // 1. Create _migrations table if it doesn't exist
