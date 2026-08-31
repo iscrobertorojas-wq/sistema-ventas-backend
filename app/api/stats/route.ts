@@ -43,7 +43,7 @@ export const GET = withAuth(async function GET() {
                 LEFT JOIN (SELECT sale_id, SUM(amount) as paid FROM Payments GROUP BY sale_id) p ON s.id = p.sale_id
                 WHERE s.total > COALESCE(p.paid, 0)
             `),
-            pool.query<RowDataPacket[]>('SELECT COALESCE(SUM(amount), 0) as total FROM Payments WHERE date >= ? AND date <= LAST_DAY(?)', [dateStr, dateStr]),
+            pool.query<RowDataPacket[]>('SELECT COALESCE(SUM(amount), 0) as total FROM Payments WHERE DATE(date) >= ? AND DATE(date) <= LAST_DAY(?)', [dateStr, dateStr]),
             pool.query<RowDataPacket[]>(`
                 SELECT DATE_FORMAT(date, '%Y-%m') as month, COUNT(*) as count, COALESCE(SUM(total), 0) as total
                 FROM Sales

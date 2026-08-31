@@ -18,7 +18,7 @@ export const GET = withAuth(async function GET(request: Request) {
         const queryParams: any[] = [];
 
         if (startDate && endDate) {
-            query += ` WHERE p.date >= ? AND p.date <= ? `;
+            query += ` WHERE DATE(p.date) >= ? AND DATE(p.date) <= ? `;
             queryParams.push(startDate, endDate);
         }
 
