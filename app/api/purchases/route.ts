@@ -73,7 +73,7 @@ export const POST = withAuth(async function POST(request: Request) {
         // Calculate total
         const total = items.reduce((sum: number, item: any) => sum + parseFloat(item.cost), 0);
 
-        const purchaseDate = date || new Date().toISOString().split('T')[0];
+        const purchaseDate = date ? date.split('T')[0] : new Date().toISOString().split('T')[0];
 
         // Insert Purchase
         const [result] = await pool.query(
@@ -118,7 +118,7 @@ export const PUT = withAuth(async function PUT(request: Request) {
 
         // Calculate new total
         const total = items.reduce((sum: number, item: any) => sum + parseFloat(item.cost), 0);
-        const purchaseDate = date || new Date().toISOString().split('T')[0];
+        const purchaseDate = date ? date.split('T')[0] : new Date().toISOString().split('T')[0];
 
         // Update Purchase
         await connection.query(
