@@ -12,7 +12,7 @@ export const GET = withAuth(async function GET(
     try {
         const { id } = await params;
         const [purchases] = await pool.query<RowDataPacket[]>(
-            `SELECT p.*, s.name as supplier_name 
+            `SELECT p.id, p.supplier_id, DATE_FORMAT(p.date, '%Y-%m-%d') as date, p.total, p.notes, p.created_at, s.name as supplier_name 
              FROM Purchases p 
              JOIN Suppliers s ON p.supplier_id = s.id 
              WHERE p.id = ?`,
