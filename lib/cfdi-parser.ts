@@ -63,68 +63,87 @@ export function parseCfdiXml(xmlStr: string, userRfc?: string | null): ParsedCfd
         const subtotal = parseFloat(getAttr('SubTotal') || getAttr('subTotal') || '0') || 0;
         const total = parseFloat(getAttr('Total') || getAttr('total') || '0') || 0;
 
-        // 5. IVA Traslado (Impuesto 002)
+        // 5. Impuestos del CFDI
+        // En CFDI 3.3 y 4.0, el nodo raíz de Impuestos globales se ubica después de </Conceptos>.
+        let rootImpuestosXml = '';
+        const conceptosEndIdx = xmlStr.search(/<\/(?:cfdi:)?Conceptos>/i);
+        if (conceptosEndIdx !== -1) {
+            const afterConceptos = xmlStr.substring(conceptosEndIdx);
+            const rootImpMatch = afterConceptos.match(/<(?:cfdi:)?Impuestos[\s\S]*?<\/(?:cfdi:)?Impuestos>/i);
+            if (rootImpMatch) {
+                rootImpuestosXml = rootImpMatch[0];
+            }
+        }
+
+        // --- IVA Trasladado (Impuesto 002) ---
         let iva = 0;
-        const totalImpTrasMatch = xmlStr.match(/TotalImpuestosTrasladados="([^"]+)"/i);
+        const totalImpTrasMatch = (rootImpuestosXml || xmlStr).match(/TotalImpuestosTrasladados="([^"]+)"/i);
         if (totalImpTrasMatch) {
             iva = parseFloat(totalImpTrasMatch[1]) || 0;
         } else {
-            // Buscar traslado IVA 002 en el nodo Traslados
-            const trasladosMatch =
-                xmlStr.match(/<(?:cfdi:)?Traslado[^>]+Impuesto="002"[^>]+Importe="([^"]+)"/i) ||
-                xmlStr.match(/<(?:cfdi:)?Traslado[^>]+Importe="([^"]+)"[^>]+Impuesto="002"/i);
-            if (trasladosMatch) {
-                iva = parseFloat(trasladosMatch[1]) || 0;
+            const trasladosXml = rootImpuestosXml || xmlStr;
+            const trasMatch =
+                trasladosXml.match(/<(?:cfdi:)?Traslado\b[^>]*\bImpuesto="002"[^>]*\bImporte="([^"]+)"/i) ||
+                trasladosXml.match(/<(?:cfdi:)?Traslado\b[^>]*\bImporte="([^"]+)"[^>]*\bImpuesto="002"/i);
+            if (trasMatch) {
+                iva = parseFloat(trasMatch[1]) || 0;
             } else if (total > subtotal) {
                 iva = Math.round((total - subtotal) * 100) / 100;
             }
         }
 
-        // 6. Retenciones
-        // IVA Retenido (Impuesto 002 dentro de Retenciones)
+        // --- Retenciones Federales (IVA 002, ISR 001, IEPS/Federal 003) ---
         let ret_iva = 0;
-        const retIvaMatch =
-            xmlStr.match(/<(?:cfdi:)?Retencion[^>]+Impuesto="002"[^>]+Importe="([^"]+)"/i) ||
-            xmlStr.match(/<(?:cfdi:)?Retencion[^>]+Importe="([^"]+)"[^>]+Impuesto="002"/i);
-        if (retIvaMatch) {
-            ret_iva = parseFloat(retIvaMatch[1]) || 0;
-        } else {
-            // Fallback: TotalImpuestosRetenidos solo si hay un único Impuesto="002"
-            const totalRetMatch = xmlStr.match(/TotalImpuestosRetenidos="([^"]+)"/i);
-            if (totalRetMatch) {
-                // Solo asignamos al IVA si encontramos exactamente Impuesto="002"
-                const soloCfdiIva = xmlStr.match(/<(?:cfdi:)?Retencion[^>]+Impuesto="002"/i);
-                const soloCfdiIsr = xmlStr.match(/<(?:cfdi:)?Retencion[^>]+Impuesto="001"/i);
-                if (soloCfdiIva && !soloCfdiIsr) {
-                    ret_iva = parseFloat(totalRetMatch[1]) || 0;
-                }
-            }
-        }
-
-        // ISR Retenido (Impuesto 001)
         let ret_isr = 0;
-        const retIsrMatch =
-            xmlStr.match(/<(?:cfdi:)?Retencion[^>]+Impuesto="001"[^>]+Importe="([^"]+)"/i) ||
-            xmlStr.match(/<(?:cfdi:)?Retencion[^>]+Importe="([^"]+)"[^>]+Impuesto="001"/i);
-        if (retIsrMatch) {
-            ret_isr = parseFloat(retIsrMatch[1]) || 0;
+        let ret_cedular = 0;
+
+        // Contexto primario: el nodo <Impuestos> global de la factura
+        const retContextXml = rootImpuestosXml || xmlStr;
+
+        // 5.1 Retención IVA (Impuesto 002)
+        const ivaRetRegex1 = /<(?:cfdi:)?Retencion\b[^>]*\bImpuesto="002"[^>]*\bImporte="([^"]+)"/gi;
+        const ivaRetRegex2 = /<(?:cfdi:)?Retencion\b[^>]*\bImporte="([^"]+)"[^>]*\bImpuesto="002"/gi;
+        let m: RegExpExecArray | null;
+        while ((m = ivaRetRegex1.exec(retContextXml)) !== null) ret_iva += parseFloat(m[1]) || 0;
+        while ((m = ivaRetRegex2.exec(retContextXml)) !== null) ret_iva += parseFloat(m[1]) || 0;
+
+        // 5.2 Retención ISR (Impuesto 001)
+        const isrRetRegex1 = /<(?:cfdi:)?Retencion\b[^>]*\bImpuesto="001"[^>]*\bImporte="([^"]+)"/gi;
+        const isrRetRegex2 = /<(?:cfdi:)?Retencion\b[^>]*\bImporte="([^"]+)"[^>]*\bImpuesto="001"/gi;
+        while ((m = isrRetRegex1.exec(retContextXml)) !== null) ret_isr += parseFloat(m[1]) || 0;
+        while ((m = isrRetRegex2.exec(retContextXml)) !== null) ret_isr += parseFloat(m[1]) || 0;
+
+        // 5.3 Retención Impuesto 003 (IEPS o Cedular federal)
+        const cedRetRegex1 = /<(?:cfdi:)?Retencion\b[^>]*\bImpuesto="003"[^>]*\bImporte="([^"]+)"/gi;
+        const cedRetRegex2 = /<(?:cfdi:)?Retencion\b[^>]*\bImporte="([^"]+)"[^>]*\bImpuesto="003"/gi;
+        while ((m = cedRetRegex1.exec(retContextXml)) !== null) ret_cedular += parseFloat(m[1]) || 0;
+        while ((m = cedRetRegex2.exec(retContextXml)) !== null) ret_cedular += parseFloat(m[1]) || 0;
+
+        // Fallback: si no hubo en el nodo raíz global, buscar si hubo en conceptos
+        if (rootImpuestosXml && ret_iva === 0 && ret_isr === 0) {
+            const conceptosXml = xmlStr.substring(0, conceptosEndIdx);
+            while ((m = ivaRetRegex1.exec(conceptosXml)) !== null) ret_iva += parseFloat(m[1]) || 0;
+            while ((m = ivaRetRegex2.exec(conceptosXml)) !== null) ret_iva += parseFloat(m[1]) || 0;
+            while ((m = isrRetRegex1.exec(conceptosXml)) !== null) ret_isr += parseFloat(m[1]) || 0;
+            while ((m = isrRetRegex2.exec(conceptosXml)) !== null) ret_isr += parseFloat(m[1]) || 0;
         }
 
-        // Retención Cedular / ISH (Impuesto 003 o ImpLocal en complemento)
-        let ret_cedular = 0;
-        const retCedularMatch =
-            xmlStr.match(/<(?:cfdi:)?Retencion[^>]+Impuesto="003"[^>]+Importe="([^"]+)"/i) ||
-            xmlStr.match(/<(?:cfdi:)?Retencion[^>]+Importe="([^"]+)"[^>]+Impuesto="003"/i);
-        if (retCedularMatch) {
-            ret_cedular = parseFloat(retCedularMatch[1]) || 0;
+        // 5.4 Retenciones Locales (Cedular / ISH / 5 al millar) en Complemento ImpuestosLocales
+        const localTotalMatch = xmlStr.match(/<[^>]*ImpuestosLocales\b[^>]*\bTotaldeRetenciones="([^"]+)"/i);
+        if (localTotalMatch) {
+            ret_cedular += parseFloat(localTotalMatch[1]) || 0;
         } else {
-            // Complemento LocalFiscalEmisor: ImpuestosLocalesRetenidos ImpLocRetenido
-            const localRetMatch = xmlStr.match(/ImpLocRetenido="([^"]+)"/i) ||
-                                  xmlStr.match(/ImpuestoLocalRetenido="([^"]+)"/i);
-            if (localRetMatch) {
-                ret_cedular = parseFloat(localRetMatch[1]) || 0;
+            const locRetRegex = /<[^>]*RetencionesLocales\b[^>]*\bImporte="([^"]+)"/gi;
+            while ((m = locRetRegex.exec(xmlStr)) !== null) {
+                ret_cedular += parseFloat(m[1]) || 0;
             }
         }
+
+        // Redondear a 2 decimales
+        iva = Math.round(iva * 100) / 100;
+        ret_iva = Math.round(ret_iva * 100) / 100;
+        ret_isr = Math.round(ret_isr * 100) / 100;
+        ret_cedular = Math.round(ret_cedular * 100) / 100;
 
         // 7. Fecha de emisión
         let fechaEmision = getAttr('Fecha') || getAttr('fecha');
