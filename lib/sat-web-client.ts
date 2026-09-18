@@ -66,7 +66,8 @@ export class SafeWebClient {
         const body: string = request.getBody?.() || '';
 
         return new Promise<InstanceType<typeof CResponse>>((resolve) => {
-            let req: https.ClientRequest;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let req: any;
             let settled = false;
 
             const settle = (response: InstanceType<typeof CResponse>) => {

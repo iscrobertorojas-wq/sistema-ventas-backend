@@ -6,13 +6,16 @@ const mysql = require('mysql2/promise');
 const envPath = path.join(__dirname, '../.env.local');
 if (fs.existsSync(envPath)) {
     const envConfig = fs.readFileSync(envPath, 'utf-8');
-    envConfig.split('\n').forEach(line => {
-        const match = line.match(/^([^=]+)=(.*)$/);
-        if (match) {
-            const key = match[1].trim();
-            const val = match[2].trim();
-            if (!process.env[key]) {
-                process.env[key] = val;
+    envConfig.split(/\r?\n/).forEach(line => {
+        const trimmedLine = line.trim();
+        if (trimmedLine && !trimmedLine.startsWith('#')) {
+            const match = trimmedLine.match(/^([^=]+)=(.*)$/);
+            if (match) {
+                const key = match[1].trim();
+                const val = match[2].trim();
+                if (!process.env[key]) {
+                    process.env[key] = val;
+                }
             }
         }
     });

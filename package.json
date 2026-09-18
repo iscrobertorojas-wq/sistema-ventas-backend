@@ -4,11 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
-    "build": "node scripts/migrate.js && next build",
+    "postinstall": "node scripts/patch-sat-library.js",
+    "build": "node scripts/patch-sat-library.js && node scripts/migrate.js && next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@nodecfdi/credentials": "^3.2.0",
+    "@nodecfdi/sat-ws-descarga-masiva": "^2.0.0",
+    "@types/adm-zip": "^0.5.8",
+    "adm-zip": "^0.6.1",
     "bcryptjs": "^3.0.3",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.16.3",
