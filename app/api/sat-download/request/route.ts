@@ -16,6 +16,33 @@ async function getEncryptedSetting(key: string): Promise<string | null> {
     return rows[0].setting_value;
 }
 
+// Helper: obtiene la fecha y hora actual en la zona horaria de México (America/Mexico_City)
+// aplicando un margen de seguridad de 2 minutos para evitar cualquier rechazo del SAT por desfase de reloj.
+function getMexicoDateTime(): { todayDateStr: string; safeTimeStr: string } {
+    const d = new Date();
+    // Restamos 2 minutos por seguridad para que el SAT nunca considere la fecha/hora en el futuro
+    const dSafe = new Date(d.getTime() - 2 * 60 * 1000);
+
+    const formatterDate = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Mexico_City',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    });
+    const todayDateStr = formatterDate.format(dSafe); // 'YYYY-MM-DD'
+
+    const formatterTime = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'America/Mexico_City',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+    const safeTimeStr = formatterTime.format(dSafe); // 'HH:mm:ss'
+
+    return { todayDateStr, safeTimeStr };
+}
+
 export const POST = withAuth(async function POST(request) {
     try {
         const body = await request.json();
@@ -79,9 +106,33 @@ export const POST = withAuth(async function POST(request) {
         const tiposAProcesar: ('emitidos' | 'recibidos')[] =
             tipo === 'ambos' ? ['emitidos', 'recibidos'] : [tipo as 'emitidos' | 'recibidos'];
 
+        // 5. Ajustar fechas para cumplir estrictamente con las reglas del Web Service del SAT:
+        // El SAT rechaza con "XML Mal Formado: La solicitud de descarga no es válida. Fecha final invalida"
+        // si la fecha final excede la fecha y hora actual en México.
+        const { todayDateStr, safeTimeStr } = getMexicoDateTime();
+
+        let cleanInicio = String(fecha_inicio).trim();
+        let cleanFin = String(fecha_fin).trim();
+
+        // Si la fecha fin es posterior a hoy en México, toparla a hoy
+        if (cleanFin > todayDateStr) {
+            cleanFin = todayDateStr;
+        }
+        if (cleanInicio > cleanFin) {
+            cleanInicio = cleanFin;
+        }
+
+        // Si la fecha fin es hoy en México, no podemos enviar 23:59:59 porque aún no transcurre el día;
+        // usamos la hora actual en México con margen seguro.
+        // Si la fecha fin es de un día anterior, enviamos 23:59:59 porque ese día ya concluyó.
+        const horaFin = (cleanFin === todayDateStr) ? safeTimeStr : '23:59:59';
+        const horaInicio = '00:00:00';
+
+        console.log(`[SAT Request] Rango ajustado para SAT: ${cleanInicio}T${horaInicio} a ${cleanFin}T${horaFin} (Hoy MX: ${todayDateStr} ${safeTimeStr})`);
+
         const period = DateTimePeriod.createFromValues(
-            `${fecha_inicio}T00:00:00`,
-            `${fecha_fin}T23:59:59`
+            `${cleanInicio}T${horaInicio}`,
+            `${cleanFin}T${horaFin}`
         );
 
         const resultados: any[] = [];
@@ -106,7 +157,7 @@ export const POST = withAuth(async function POST(request) {
                     await pool.query(
                         `INSERT INTO SatDownloadRequests (tipo, fecha_inicio, fecha_fin, estado, mensaje_error)
                          VALUES (?, ?, ?, 'error', ?)`,
-                        [tipoItem, fecha_inicio, fecha_fin, msg]
+                        [tipoItem, cleanInicio, cleanFin, msg]
                     );
                     errores.push(`${tipoItem}: ${msg}`);
                     resultados.push({ tipo: tipoItem, estado: 'error', error: msg });
@@ -115,7 +166,7 @@ export const POST = withAuth(async function POST(request) {
                     const [insertResult]: any = await pool.query(
                         `INSERT INTO SatDownloadRequests (request_id, tipo, fecha_inicio, fecha_fin, estado)
                          VALUES (?, ?, ?, ?, 'pendiente')`,
-                        [satRequestId, tipoItem, fecha_inicio, fecha_fin]
+                        [satRequestId, tipoItem, cleanInicio, cleanFin]
                     );
                     resultados.push({
                         id: insertResult.insertId,
