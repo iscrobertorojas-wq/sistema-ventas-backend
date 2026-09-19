@@ -174,8 +174,16 @@ export const POST = withAuth(async function POST(request: NextRequest) {
             razon_social: razonSocial
         });
     } catch (error: any) {
-        console.error('[FIEL Save] Error:', error);
-        return NextResponse.json({ error: error.message || 'Error interno al guardar la FIEL' }, { status: 500 });
+        console.error('[FIEL Save] Error inesperado:', {
+            message: error?.message,
+            name: error?.name,
+            stack: error?.stack,
+            code: error?.code,
+        });
+        return NextResponse.json({
+            error: error?.message || 'Error interno al guardar la FIEL',
+            _debug: process.env.NODE_ENV !== 'production' ? error?.stack : undefined
+        }, { status: 500 });
     }
 });
 
