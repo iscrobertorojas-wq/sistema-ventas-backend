@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { withAuth } from '@/lib/auth';
 import { decrypt, decryptToString, encrypt } from '@/lib/encryption';
-import { RowDataPacket } from 'mysql2';
+import { parseCfdiXml } from '@/lib/cfdi-parser';
+import { detectCancellationInXml, checkSatCfdiStatus } from '@/lib/sat-status-checker';
+import { saveCfdiPagos } from '@/lib/sat-pagos-helper';
+import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import AdmZip from 'adm-zip';
 
 export const dynamic = 'force-dynamic';
@@ -15,9 +18,6 @@ async function getEncryptedSetting(key: string): Promise<string | null> {
     if (!rows || rows.length === 0 || !rows[0].setting_value) return null;
     return rows[0].setting_value;
 }
-
-import { parseCfdiXml } from '@/lib/cfdi-parser';
-
 
 export const POST = withAuth(async function POST(request) {
     try {
@@ -81,6 +81,8 @@ export const POST = withAuth(async function POST(request) {
         const tipo = solicitud.tipo === 'emitidos' ? 'emitido' : 'recibido';
         let cfdisSaved = 0;
         let cfdisSkipped = 0;
+        let cfdisCanceladosActualizados = 0;
+        let cfdisCanceladosNuevos = 0;
 
         // Descargar cada paquete
         for (const pkgId of packageIds) {
@@ -102,32 +104,84 @@ export const POST = withAuth(async function POST(request) {
                 if (!entry.entryName.toLowerCase().endsWith('.xml')) continue;
 
                 const xmlContent = entry.getData().toString('utf-8');
-                const parsed = parseCfdiXml(xmlContent);
 
+                // 1. Validar si el XML es un Acuse de Cancelación
+                const acuseInfo = detectCancellationInXml(xmlContent);
+                if (acuseInfo.isAcuse && acuseInfo.uuid) {
+                    const [resAcuse]: any = await pool.query(
+                        'UPDATE SatCfdis SET estado_sat = "Cancelado" WHERE uuid = ?',
+                        [acuseInfo.uuid]
+                    );
+                    if (resAcuse?.affectedRows > 0) {
+                        cfdisCanceladosActualizados++;
+                    }
+                    continue;
+                }
+
+                // 2. Parsear el CFDI
+                const parsed = parseCfdiXml(xmlContent);
                 if (!parsed || !parsed.uuid) {
                     console.warn('[SAT Download] XML sin UUID válido, saltando...');
                     continue;
                 }
 
-                // Validar que el CFDI no exista previamente en la base de datos
+                // 3. Determinar estatus de cancelación
+                let estadoSat: 'Vigente' | 'Cancelado' = acuseInfo.isCancelled ? 'Cancelado' : 'Vigente';
+
+                // Si no se detectó cancelación directa en el texto del XML, consultar el servicio oficial del SAT
+                if (estadoSat !== 'Cancelado') {
+                    const satOnlineStatus = await checkSatCfdiStatus(
+                        parsed.uuid,
+                        parsed.rfc_emisor,
+                        parsed.rfc_receptor,
+                        parsed.total
+                    );
+                    if (satOnlineStatus === 'Cancelado') {
+                        estadoSat = 'Cancelado';
+                    }
+                }
+
+                // 4. Validar existencia previa en la BD
                 const [existing] = await pool.query<RowDataPacket[]>(
-                    'SELECT id FROM SatCfdis WHERE uuid = ?',
+                    'SELECT id, estado_sat FROM SatCfdis WHERE uuid = ?',
                     [parsed.uuid]
                 );
 
                 if (existing && existing.length > 0) {
+                    const existingRow = existing[0];
+                    // Si el XML descargado está cancelado y en la BD no lo estaba, actualizar estatus en la BD
+                    if (estadoSat === 'Cancelado' && existingRow.estado_sat !== 'Cancelado') {
+                        await pool.query(
+                            'UPDATE SatCfdis SET estado_sat = "Cancelado" WHERE id = ?',
+                            [existingRow.id]
+                        );
+                        cfdisCanceladosActualizados++;
+                    } else if (!existingRow.estado_sat) {
+                        await pool.query(
+                            'UPDATE SatCfdis SET estado_sat = "Vigente" WHERE id = ?',
+                            [existingRow.id]
+                        );
+                    }
+
+                    // Si es un comprobante de pago, asegurar que sus relaciones queden guardadas en SatCfdiPagos
+                    if (parsed.pagos && parsed.pagos.length > 0) {
+                        await saveCfdiPagos(pool, existingRow.id, parsed.uuid, parsed.pagos);
+                    }
+
                     cfdisSkipped++;
                     continue;
                 }
 
-                // Encriptar el XML antes de almacenar en BD
+                // 5. En caso de no existir previamente en la BD:
+                // Se descarga y guarda de todas formas con su estatus ('Cancelado' o 'Vigente')
                 const xmlEncrypted = encrypt(xmlContent);
 
-                await pool.query(
+                const [insertResult] = await pool.query<ResultSetHeader>(
                     `INSERT INTO SatCfdis 
                      (request_id, uuid, tipo, rfc_emisor, nombre_emisor, rfc_receptor, nombre_receptor,
-                      fecha_emision, subtotal, iva, ret_iva, ret_isr, ret_cedular, total, moneda, tipo_cfdi, metodo_pago, forma_pago, uso_cfdi, xml_content)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      fecha_emision, fecha_pago, subtotal, iva, ret_iva, ret_isr, ret_cedular, total, 
+                      moneda, tipo_cfdi, metodo_pago, forma_pago, uso_cfdi, estado_sat, xml_content)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                         id,
                         parsed.uuid,
@@ -137,6 +191,7 @@ export const POST = withAuth(async function POST(request) {
                         parsed.rfc_receptor || '',
                         parsed.nombre_receptor || null,
                         parsed.fecha_emision || null,
+                        parsed.fecha_pago || null,
                         parsed.subtotal || 0,
                         parsed.iva || 0,
                         parsed.ret_iva || 0,
@@ -148,10 +203,22 @@ export const POST = withAuth(async function POST(request) {
                         parsed.metodo_pago || null,
                         parsed.forma_pago || null,
                         parsed.uso_cfdi || null,
+                        estadoSat,
                         xmlEncrypted
                     ]
                 );
+
+                const newCfdiId = insertResult.insertId;
+
+                // Guardar desglose de pagos si aplica
+                if (parsed.pagos && parsed.pagos.length > 0) {
+                    await saveCfdiPagos(pool, newCfdiId, parsed.uuid, parsed.pagos);
+                }
+
                 cfdisSaved++;
+                if (estadoSat === 'Cancelado') {
+                    cfdisCanceladosNuevos++;
+                }
             }
         }
 
@@ -165,7 +232,9 @@ export const POST = withAuth(async function POST(request) {
             message: 'Descarga completada',
             estado: 'descargado',
             cfdis_nuevos: cfdisSaved,
-            cfdis_duplicados: cfdisSkipped
+            cfdis_duplicados: cfdisSkipped,
+            cfdis_cancelados_actualizados: cfdisCanceladosActualizados,
+            cfdis_cancelados_nuevos: cfdisCanceladosNuevos
         });
 
     } catch (error: any) {

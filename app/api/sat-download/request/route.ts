@@ -142,8 +142,10 @@ export const POST = withAuth(async function POST(request) {
             try {
                 const downloadType = tipoItem === 'emitidos' ? new DownloadType('issued') : new DownloadType('received');
 
-                // Sólo CFDIs vigentes (active = "1"); el SAT rechaza solicitudes que incluyan cancelados
-                const documentStatus = new DocumentStatus('active');
+                // Para recibidos, el SAT rechaza si no es 'active'. Para emitidos, 'undefined' permite descargar tanto vigentes como cancelados.
+                const documentStatus = tipoItem === 'emitidos'
+                    ? new DocumentStatus('undefined')
+                    : new DocumentStatus('active');
 
                 const queryParams = QueryParameters.create(period)
                     .withDownloadType(downloadType)
