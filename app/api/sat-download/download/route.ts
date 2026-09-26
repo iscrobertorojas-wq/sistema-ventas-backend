@@ -107,13 +107,15 @@ export const POST = withAuth(async function POST(request) {
 
                 // 1. Validar si el XML es un Acuse de Cancelación
                 const acuseInfo = detectCancellationInXml(xmlContent);
-                if (acuseInfo.isAcuse && acuseInfo.uuid) {
-                    const [resAcuse]: any = await pool.query(
-                        'UPDATE SatCfdis SET estado_sat = "Cancelado" WHERE uuid = ?',
-                        [acuseInfo.uuid]
-                    );
-                    if (resAcuse?.affectedRows > 0) {
-                        cfdisCanceladosActualizados++;
+                if (acuseInfo.isAcuse && acuseInfo.uuids.length > 0) {
+                    for (const cancelUuid of acuseInfo.uuids) {
+                        const [resAcuse]: any = await pool.query(
+                            'UPDATE SatCfdis SET estado_sat = "Cancelado" WHERE uuid = ?',
+                            [cancelUuid]
+                        );
+                        if (resAcuse?.affectedRows > 0) {
+                            cfdisCanceladosActualizados++;
+                        }
                     }
                     continue;
                 }
@@ -134,7 +136,8 @@ export const POST = withAuth(async function POST(request) {
                         parsed.uuid,
                         parsed.rfc_emisor,
                         parsed.rfc_receptor,
-                        parsed.total
+                        parsed.total_original !== undefined ? parsed.total_original : parsed.total,
+                        parsed.sello
                     );
                     if (satOnlineStatus === 'Cancelado') {
                         estadoSat = 'Cancelado';

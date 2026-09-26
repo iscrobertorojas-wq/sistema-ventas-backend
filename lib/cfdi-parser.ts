@@ -40,6 +40,8 @@ export interface ParsedCfdi {
     ret_isr: number;
     ret_cedular: number;
     total: number;
+    total_original?: number;
+    sello?: string | null;
     moneda: string;
     tipo_cfdi: string | null;
     metodo_pago: string | null;
@@ -121,6 +123,10 @@ export function parseCfdiPagos(xmlStr: string): ParsedPayment[] {
             const ivaRetRegex = /<(?:[a-zA-Z0-9]+:)?RetencionDR\b[^>]*\bImpuestoDR="002"[^>]*\bImporteDR="([^"]+)"/gi;
             while ((tm = ivaRetRegex.exec(drBody)) !== null) {
                 ret_iva += parseFloat(tm[1]) || 0;
+            }
+            const cedRetRegex = /<(?:[a-zA-Z0-9]+:)?RetencionDR\b[^>]*\bImpuestoDR="003"[^>]*\bImporteDR="([^"]+)"/gi;
+            while ((tm = cedRetRegex.exec(drBody)) !== null) {
+                ret_cedular += parseFloat(tm[1]) || 0;
             }
 
             // Fallback si no vinieron impuestos detallados en el docto (Pagos 1.0)
@@ -213,7 +219,9 @@ export function parseCfdiXml(xmlStr: string, userRfc?: string | null): ParsedCfd
 
         // 4. Montos del Comprobante
         let subtotal = parseFloat(getAttr('SubTotal') || getAttr('subTotal') || '0') || 0;
-        let total = parseFloat(getAttr('Total') || getAttr('total') || '0') || 0;
+        const totalOriginal = parseFloat(getAttr('Total') || getAttr('total') || '0') || 0;
+        let total = totalOriginal;
+        const sello = getAttr('Sello') || getAttr('sello') || null;
 
         // 5. Impuestos del CFDI
         let rootImpuestosXml = '';
@@ -373,6 +381,8 @@ export function parseCfdiXml(xmlStr: string, userRfc?: string | null): ParsedCfd
             ret_isr,
             ret_cedular,
             total,
+            total_original: totalOriginal,
+            sello,
             moneda,
             tipo_cfdi: tipoCfdi,
             metodo_pago: metodoPago,
